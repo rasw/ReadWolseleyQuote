@@ -224,12 +224,19 @@ namespace Read_Wolseley_Quote
                 [11] #Decking pipe
                 [12] |Pipe 50x 100m coils SDR11|pc|200||0|0|||
              */
+            string wolseleyID = String.Empty;
 
             try
             {
-                string query = "Select SupplierID FROM dbo.Supplier WHERE SupplierName = 'Wolseley'";
-                string wolseleyID = GetScalarData(query);     // Get the id from the DB - get the wolseley supplierID
+               wolseleyID = GetScalarData("Select SupplierID FROM dbo.Supplier WHERE SupplierName = 'Wolseley'");     // Get the id from the DB - get the wolseley supplierID
+            }
+            catch (Exception ex)
+            {
+                Logger.WriteToLog(ex.Message);
+            }
 
+            try
+            {
                 List<string> sqlScriptLines = new List<string>();       // holds the sql script to update and insert into database
                 StringBuilder scriptLine = new StringBuilder();         // builder for the query
                
@@ -332,7 +339,7 @@ namespace Read_Wolseley_Quote
                 scriptLine.Append(midSQL);
 
                 scriptLine.Append("'" + DateTime.Now + "',");
-                scriptLine.Append(wolseleyID + ",'','");
+                scriptLine.Append(SupplierID + ",'','");
                 scriptLine.Append(listData[0] + "',");   // QuoteCageType
 
 

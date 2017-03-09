@@ -26,6 +26,8 @@ namespace Read_Wolseley_Quote
         private void Form1_Activated(object sender, EventArgs e)
         {
             ReadQuoteSpreadsheet();
+            btnClose.Enabled = true;
+
             //AppSettings appSet = new AppSettings(Path.Combine(Directory.GetCurrentDirectory(), "ReadQuotesShowHide.xml"));
             if(!Convert.ToBoolean(appSet.getValue("Wolseley")))
                 Dispose();
@@ -46,8 +48,8 @@ namespace Read_Wolseley_Quote
 
         public void ReadQuoteSpreadsheet()
         {
-            //string[] sheetNames = { "Polarcirkel 400 FR", "Polarcirkel 450 FR", "Polarcirkel 500 FR" };
             string[] sheetNames = { "Polarcirkel 400 FR", "Polarcirkel 450 FR", "Polarcirkel 500 FR" };
+            // string[] sheetNames = { "Polarcirkel 400 FR" , "Polarcirkel 450 FR" }; //, "Polarcirkel 500 FR" };
            
             //string[] sheetNames = {"Polarcirkel 400 FR"};
             //string[] sheetNames = { "Polarcirkel 400 FR", "Polarcirkel 450 FR"};
@@ -61,13 +63,14 @@ namespace Read_Wolseley_Quote
             {    
                 lstOutput.Items.Add("Reading tab " + sheetName);        // output progress to GUI
                 DataTable dt = new DataTable();
+
                 using (OleDbConnection conn = new OleDbConnection())
                 {
                     conn.ConnectionString = "Provider=Microsoft.ACE.OLEDB.12.0;Data Source=" + filename + ";" + "Extended Properties='Excel 12.0 Xml;HDR=YES;IMEX=1;MAXSCANROWS=0'";
                     using (OleDbCommand comm = new OleDbCommand())
                     {
                         comm.CommandText = "Select * from [" + sheetName + "$]";
-                        // comm.CommandText = "Select F1, F3, F4 from [" + sheetName + "$]";
+                        //comm.CommandText = "Select F1, F3, F4 from [" + sheetName + "$]";
                         // comm.CommandText = "Select C1, C2, C3, C4, C5,C6,C7,C8,C9,C10 from [" + sheetName + "$]";
                         comm.Connection = conn;
 
@@ -77,12 +80,11 @@ namespace Read_Wolseley_Quote
                             da.Fill(dt);
                         }
                     }
-
                     conn.Close();
                 }
 
-               // dataGridView1.DataSource = dt.DefaultView;
-           
+               dataGridView1.DataSource = dt.DefaultView;
+                           
                 List<string> sheetData  = new  List<string>();
 
                 lstOutput.Items.Add("Processing tab data... " + sheetName);        // output progress to GUI
@@ -202,8 +204,8 @@ namespace Read_Wolseley_Quote
                     }
                 }catch{}
 
-                string suppID = ProcessBaseDataToDB(sheetData);
-                ProcessFloatingStructuresDataToDB(sheetData, suppID);
+               string id = ProcessBaseDataToDB(sheetData);
+               ProcessFloatingStructuresDataToDB(sheetData, id);
             }
         }
 
@@ -215,16 +217,19 @@ namespace Read_Wolseley_Quote
                 [2] Pipe spec|SDR|17
                 [3] Circumference||90|m
                 [4] Sinkertube||1|pc
+
                 [5] Item no/Part No|Equipment|Unit|Quantity|Price per M|discount  %|Price per ton|Del Y/N|12|13.5
                 [6] #Floating Structures
-                [7] |Inner floating pipe SDR17|m|186||0|0||15.5|13.7777777777778
-                [8] |Handrail pipe 140mm SD11|m|90||0|0||7.5|
+                [7]     |Inner floating pipe SDR17|m|186||0|0||15.5|13.7777777777778
+                [8]     |Handrail pipe 140mm SD11|m|90||0|0||7.5|
                 [9] #Sinkertube
-                [10] |Pipe 250 SDR11|m|96||0|0||8|7.11111111111111
+                [10]     |Pipe 250 SDR11|m|96||0|0||8|7.11111111111111
                 [11] #Decking pipe
-                [12] |Pipe 50x 100m coils SDR11|pc|200||0|0|||
+                [12]     |Pipe 50x 100m coils SDR11|pc|200||0|0|||
              */
+
             string wolseleyID = String.Empty;
+            object newID = 0;
 
             try
             {
@@ -242,7 +247,7 @@ namespace Read_Wolseley_Quote
                
                 string baseSQL = "SET DATEFORMAT dmy; INSERT INTO CageQuotes ([QuoteDateTime], [QuoteSupplierID], [QuoteReference], [QuoteCageType], [QuoteQuantity], [QuotePipeSpec], [QuoteCircumference], [QuoteCircumferenceUnits], [QuoteSinkertube], [QuoteSinkertubeUnits]";
                 string midSQL = ") VALUES (";
-                string endSQL = ")";
+                string endSQL = "); SELECT SCOPE_IDENTITY(); ";
              
                 scriptLine.Append(baseSQL);
                 scriptLine.Append(midSQL);
@@ -272,7 +277,8 @@ namespace Read_Wolseley_Quote
                         cnn.Open();
                         using (SqlCommand cmd = new SqlCommand(scriptLine.ToString(), cnn))
                         {
-                            cmd.ExecuteNonQuery();
+                             newID = cmd.ExecuteScalar();
+                            //cmd.ExecuteNonQuery();
                             cmd.Dispose();
                             cnn.Close();
                         }
@@ -283,6 +289,7 @@ namespace Read_Wolseley_Quote
                     lstOutput.Items.Add("");
                     lstOutput.Items.Add("ERROR: " + ex.Message);
                     lstOutput.Items.Add("");
+                    return "";
                 }
             }
             catch (Exception ex)
@@ -290,12 +297,13 @@ namespace Read_Wolseley_Quote
                 lstOutput.Items.Add("");
                 lstOutput.Items.Add("ERROR: " + ex.Message);
                 lstOutput.Items.Add("");
+                return "";
             }
 
-            return wolseleyID;
+            return newID.ToString();
         }
 
-        private void ProcessFloatingStructuresDataToDB(List<string> listData, string SupplierID)
+        private void ProcessFloatingStructuresDataToDB(List<string> listData, string QuoteID)
         {
             /*  >> listData Contains The full contents
                 [0] Polarcirkel 400 cage
@@ -303,15 +311,22 @@ namespace Read_Wolseley_Quote
                 [2] Pipe spec|SDR|17
                 [3] Circumference||90|m
                 [4] Sinkertube||1|pc
-                [5] Item no/Part No|Equipment|Unit|Quantity|Price per M|discount  %|Price per ton|Del Y/N|12|13.5
+                
+            [5] Item no/Part No|Equipment|Unit|Quantity|Price per M|discount  %|Price per ton|Del Y/N|12|13.5
                 [6] #Floating Structures
                 [7] |Inner floating pipe SDR17|m|186||0|0||15.5|13.7777777777778
                 [8] |Handrail pipe 140mm SD11|m|90||0|0||7.5|
-                [9] #Sinkertube
+                
+            [9] #Sinkertube
                 [10] |Pipe 250 SDR11|m|96||0|0||8|7.11111111111111
-                [11] #Decking pipe
+                
+            [11] #Decking pipe
                 [12] |Pipe 50x 100m coils SDR11|pc|200||0|0|||
              */
+
+            // 1.   Get quote ID
+            // 2.   Get the data rows
+            // 3.   Add them to DB
 
             try
             {
@@ -322,26 +337,29 @@ namespace Read_Wolseley_Quote
                 string midSQL = ") VALUES (";
                 string endSQL = ")";
 
-                /*
-                 * (<QuoteID, int,>
-                   ,<FloatingItemPartNo, nvarchar(30),>
-                   ,<FloatingEquipment, nvarchar(50),>
-                   ,<FloatingUnit, nvarchar(1),>
-                   ,<FloatingQuantity, int,>
-                   ,<FloatingPricePerM, money,>
-                   ,<FloatingPrice PerTon, money,>
-                   ,<FloatingDelivery, nvarchar(1),>
-                   ,<FloatingCost12, money,>
-                   ,<FloatingCost135, money,>)
-                 */
-
+                string sqs = "'";
                 scriptLine.Append(baseSQL);
                 scriptLine.Append(midSQL);
 
-                scriptLine.Append("'" + DateTime.Now + "',");
-                scriptLine.Append(SupplierID + ",'','");
-                scriptLine.Append(listData[0] + "',");   // QuoteCageType
+                scriptLine.Append("'" + QuoteID + "',");        // 'QuoteID',
 
+                int line = 7;
+                while (listData[line].ToLower() != "#sinkertube")  // Process ** Floating Structures **
+                {
+                    string[] s = listData[line].Split('|');     // Length values split
+                    scriptLine.Append(sqs + s[0] + "',");       // FloatingItemPartNo
+                    scriptLine.Append(sqs + s[1] + "',");       // FloatingEquipment
+                    scriptLine.Append(sqs + s[2] + "',");       // FloatingUnit
+                    scriptLine.Append(sqs + s[3] + "',");       // FloatingQuantity
+                    scriptLine.Append(sqs + s[4] + "',");       // FloatingPricePerM
+                    scriptLine.Append(sqs + s[5] + "',");       // FloatingPrice PerTon
+                    scriptLine.Append(sqs + s[6] + "',");       // FloatingDelivery
+                    scriptLine.Append(sqs + s[7] + "',");       // FloatingCost12
+                    scriptLine.Append(sqs + s[8] + "'");        // FloatingCost135
+                    line++;
+                }
+
+                scriptLine.Append(endSQL);
 
                 try
                 {
@@ -370,6 +388,28 @@ namespace Read_Wolseley_Quote
                 lstOutput.Items.Add("");
             }
         }
+
+        //while (listData[line].ToLower() != "#walkways")  // Process ** Sinkertube **
+        //{
+        //    string[] s = listData[line].Split('|');     // Length values split
+        //    scriptLine.Append(sqs + s[0] + "',");       // FloatingItemPartNo
+        //    scriptLine.Append(sqs + s[1] + "',");       // FloatingEquipment
+        //    scriptLine.Append(sqs + s[2] + "',");       // FloatingUnit
+        //    scriptLine.Append(sqs + s[3] + "',");       // FloatingQuantity
+        //    scriptLine.Append(sqs + s[4] + "',");       // FloatingPricePerM
+        //    scriptLine.Append(sqs + s[5] + "',");       // FloatingPrice PerTon
+        //    scriptLine.Append(sqs + s[6] + "',");       // FloatingDelivery
+        //    scriptLine.Append(sqs + s[7] + "',");       // FloatingCost12
+        //    scriptLine.Append(sqs + s[8] + "',");       // FloatingCost135
+        //    line++;
+        //}
+
+
+        //string[] e = listData[5].Split('|');        // Length values split
+        //scriptLine.Append(sqs + e[8]+ "',");        // FloatingCost12
+        //scriptLine.Append(sqs + e[9] + "',")        // FloatingCost135
+
+
 
         private string GetScalarData(string query)  // retrieve a single column result
         {

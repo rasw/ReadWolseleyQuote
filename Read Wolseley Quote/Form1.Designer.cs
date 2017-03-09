@@ -48,9 +48,8 @@
             this.dataGridView1.ShowCellErrors = false;
             this.dataGridView1.ShowCellToolTips = false;
             this.dataGridView1.ShowEditingIcon = false;
-            this.dataGridView1.Size = new System.Drawing.Size(643, 1);
+            this.dataGridView1.Size = new System.Drawing.Size(643, 230);
             this.dataGridView1.TabIndex = 2;
-            this.dataGridView1.Visible = false;
             this.dataGridView1.CellContentClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.dataGridView1_CellContentClick);
             // 
             // chkShowGUI
@@ -75,13 +74,14 @@
             this.lstOutput.ForeColor = System.Drawing.Color.DarkSlateGray;
             this.lstOutput.FormattingEnabled = true;
             this.lstOutput.ItemHeight = 15;
-            this.lstOutput.Location = new System.Drawing.Point(0, -4);
+            this.lstOutput.Location = new System.Drawing.Point(0, 236);
             this.lstOutput.Name = "lstOutput";
-            this.lstOutput.Size = new System.Drawing.Size(643, 435);
+            this.lstOutput.Size = new System.Drawing.Size(643, 195);
             this.lstOutput.TabIndex = 5;
             // 
             // btnClose
             // 
+            this.btnClose.Enabled = false;
             this.btnClose.Location = new System.Drawing.Point(472, 449);
             this.btnClose.Name = "btnClose";
             this.btnClose.Size = new System.Drawing.Size(159, 26);

@@ -340,15 +340,14 @@ namespace Read_Wolseley_Quote
                 string endSQL = ")";
 
                 string sqs = "'";
-                scriptLine.Append(baseSQL);
-                scriptLine.Append(midSQL);
 
-                scriptLine.Append("'" + QuoteID + "',");        // 'QuoteID',
-
-                int line = 6;
-                while (listData[line].ToLower() == "#floating structures")  // Process ** Floating Structures **
+                int line = 7;
+                while (listData[line-1].ToLower() != "#sinkertube")  // Process ** Floating Structures **
                 {
-                    line++;  // 7
+                    scriptLine.Append(baseSQL);
+                    scriptLine.Append(midSQL);
+                    scriptLine.Append("'" + QuoteID + "',");        // 'QuoteID',
+
                     string[] s = listData[line].Split('|');     // Length values split
                     scriptLine.Append(sqs + s[0] + "',");       // FloatingItemPartNo
                     scriptLine.Append(sqs + s[1] + "',");       // FloatingEquipment
@@ -367,7 +366,7 @@ namespace Read_Wolseley_Quote
                     line++;
 
                     scriptLine.Append(endSQL);
-
+                    
                     try
                     {
                         using (SqlConnection cnn = new SqlConnection(connectionString))
@@ -378,11 +377,13 @@ namespace Read_Wolseley_Quote
                                 cmd.ExecuteNonQuery();
                                 cmd.Dispose();
                                 cnn.Close();
+                                scriptLine.Clear();
                             }
                         }
                     }
                     catch (Exception ex)
                     {
+                        scriptLine.Clear();
                         lstOutput.Items.Add("");
                         lstOutput.Items.Add("ERROR: " + ex.Message);
                         lstOutput.Items.Add("");

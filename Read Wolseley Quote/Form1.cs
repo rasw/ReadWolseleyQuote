@@ -17,8 +17,10 @@ namespace Read_Wolseley_Quote
             InitializeComponent();
         }
 
-       // string connectionString = @"Data Source=(localdb)\ProjectsV13;Initial Catalog=PricingTool;Integrated Security=True;ConnectTimeout=30;Encrypt=False;TrustServerCertificate=True;ApplicationIntent=ReadWrite;MultiSubnetFailover=False";
-        string connectionString = @"Data Source=(localdb)\ProjectsV13;Initial Catalog=PricingTool;Integrated Security=True;Encrypt=False;TrustServerCertificate=True;ApplicationIntent=ReadWrite;MultiSubnetFailover=False";
+        // string connectionString = @"Data Source=(localdb)\ProjectsV13;Initial Catalog=PricingTool;Integrated Security=True;ConnectTimeout=30;Encrypt=False;TrustServerCertificate=True;ApplicationIntent=ReadWrite;MultiSubnetFailover=False";
+        // string connectionString = @"Data Source=(localdb)\ProjectsV13;Initial Catalog=PricingTool;Integrated Security=True;Encrypt=False;TrustServerCertificate=True;ApplicationIntent=ReadWrite;MultiSubnetFailover=False";
+
+        string connectionString = "Server=tcp:akvasql1.database.windows.net,1433;Initial Catalog = PricingTool; Persist Security Info=False;User ID=rwilson; Password=pCj7uu573;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout = 30;";   // Azure SQL
 
         AppSettings appSet = new AppSettings(Path.Combine(Directory.GetCurrentDirectory(), "ReadQuotesShowHide.xml"));
         string outputLine = "- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -";
@@ -333,7 +335,7 @@ namespace Read_Wolseley_Quote
                 List<string> sqlScriptLines = new List<string>();       // holds the sql script to update and insert into database
                 StringBuilder scriptLine = new StringBuilder();         // builder for the query
 
-                string baseSQL = "INSERT INTO [dbo].[FloatingStructures] ([QuoteID],[FloatingItemPartNo],[FloatingEquipment],[FloatingUnit],[FloatingQuantity],[FloatingPricePerM],[FloatingPrice PerTon],[FloatingDelivery],[FloatingCost12],[FloatingCost135]";
+                string baseSQL = "INSERT INTO [dbo].[FloatingStructures] ([QuoteID],[FloatingItemPartNo],[FloatingEquipment],[FloatingUnit],[FloatingQuantity],[FloatingPricePerM],[FloatingDiscountPercentage],[FloatingPrice PerTon],[FloatingDelivery],[FloatingCost12],[FloatingCost135]";
                 string midSQL = ") VALUES (";
                 string endSQL = ")";
 
@@ -343,42 +345,48 @@ namespace Read_Wolseley_Quote
 
                 scriptLine.Append("'" + QuoteID + "',");        // 'QuoteID',
 
-                int line = 7;
-                while (listData[line].ToLower() != "#sinkertube")  // Process ** Floating Structures **
+                int line = 6;
+                while (listData[line].ToLower() == "#floating structures")  // Process ** Floating Structures **
                 {
+                    line++;  // 7
                     string[] s = listData[line].Split('|');     // Length values split
                     scriptLine.Append(sqs + s[0] + "',");       // FloatingItemPartNo
                     scriptLine.Append(sqs + s[1] + "',");       // FloatingEquipment
                     scriptLine.Append(sqs + s[2] + "',");       // FloatingUnit
                     scriptLine.Append(sqs + s[3] + "',");       // FloatingQuantity
+
                     scriptLine.Append(sqs + s[4] + "',");       // FloatingPricePerM
-                    scriptLine.Append(sqs + s[5] + "',");       // FloatingPrice PerTon
-                    scriptLine.Append(sqs + s[6] + "',");       // FloatingDelivery
-                    scriptLine.Append(sqs + s[7] + "',");       // FloatingCost12
-                    scriptLine.Append(sqs + s[8] + "'");        // FloatingCost135
+
+                    if (s[5].Length > 0)                        // FloatingDiscount %
+                       ProcessDiscountPercentage(scriptLine, sqs, s);
+                   
+                    scriptLine.Append(sqs + s[6] + "',");       // FloatingPrice PerTon
+                    scriptLine.Append(sqs + s[7] + "',");       // FloatingDelivery 
+                    scriptLine.Append(sqs + s[8] + "',");        // FloatingCost12
+                    scriptLine.Append(sqs + s[9] + "'");        // FloatingCost135
                     line++;
-                }
 
-                scriptLine.Append(endSQL);
+                    scriptLine.Append(endSQL);
 
-                try
-                {
-                    using (SqlConnection cnn = new SqlConnection(connectionString))
+                    try
                     {
-                        cnn.Open();
-                        using (SqlCommand cmd = new SqlCommand(scriptLine.ToString(), cnn))
+                        using (SqlConnection cnn = new SqlConnection(connectionString))
                         {
-                            cmd.ExecuteNonQuery();
-                            cmd.Dispose();
-                            cnn.Close();
+                            cnn.Open();
+                            using (SqlCommand cmd = new SqlCommand(scriptLine.ToString(), cnn))
+                            {
+                                cmd.ExecuteNonQuery();
+                                cmd.Dispose();
+                                cnn.Close();
+                            }
                         }
                     }
-                }
-                catch (Exception ex)
-                {
-                    lstOutput.Items.Add("");
-                    lstOutput.Items.Add("ERROR: " + ex.Message);
-                    lstOutput.Items.Add("");
+                    catch (Exception ex)
+                    {
+                        lstOutput.Items.Add("");
+                        lstOutput.Items.Add("ERROR: " + ex.Message);
+                        lstOutput.Items.Add("");
+                    }
                 }
             }
             catch (Exception ex)
@@ -386,6 +394,22 @@ namespace Read_Wolseley_Quote
                 lstOutput.Items.Add("");
                 lstOutput.Items.Add("ERROR: " + ex.Message);
                 lstOutput.Items.Add("");
+            }
+        }
+
+        private static void ProcessDiscountPercentage(StringBuilder scriptLine, string sqs, string[] s)
+        {
+            if (s[5].EndsWith("%"))
+            {
+                s[5] = s[5].Substring(0, s[5].Length - 1);
+            }
+            if (s[5] == "0%")
+            {
+                scriptLine.Append(sqs + "0',");
+            }
+            else
+            {
+                scriptLine.Append(sqs + s[5] + "',");       // FloatingDiscount %
             }
         }
 

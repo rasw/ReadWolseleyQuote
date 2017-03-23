@@ -20,7 +20,7 @@ namespace Read_Wolseley_Quote
         // string connectionString = @"Data Source=(localdb)\ProjectsV13;Initial Catalog=PricingTool;Integrated Security=True;ConnectTimeout=30;Encrypt=False;TrustServerCertificate=True;ApplicationIntent=ReadWrite;MultiSubnetFailover=False";
         // string connectionString = @"Data Source=(localdb)\ProjectsV13;Initial Catalog=PricingTool;Integrated Security=True;Encrypt=False;TrustServerCertificate=True;ApplicationIntent=ReadWrite;MultiSubnetFailover=False";
 
-        string connectionString = "Server=tcp:akvasql1.database.windows.net,1433;Initial Catalog = PricingTool; Persist Security Info=False;User ID=rwilson; Password=pCj7uu573;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout = 30;";   // Azure SQL
+        string connectionString = "Server=tcp:akvasql1.database.windows.net,1433;Initial Catalog = PricingToolDev1; Persist Security Info=False;User ID=rwilson; Password=pCj7uu573;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout = 30;";   // Azure SQL
 
         AppSettings appSet = new AppSettings(Path.Combine(Directory.GetCurrentDirectory(), "ReadQuotesShowHide.xml"));
         string outputLine = "- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -";
@@ -249,7 +249,7 @@ namespace Read_Wolseley_Quote
                
                 string baseSQL = "SET DATEFORMAT dmy; INSERT INTO CageQuotes ([QuoteDateTime], [QuoteSupplierID], [QuoteReference], [QuoteCageType], [QuoteQuantity], [QuotePipeSpec], [QuoteCircumference], [QuoteCircumferenceUnits], [QuoteSinkertube], [QuoteSinkertubeUnits]";
                 string midSQL = ") VALUES (";
-                string endSQL = "); SELECT SCOPE_IDENTITY(); ";
+                string endSQL = "); SELECT SCOPE_IDENTITY();";
              
                 scriptLine.Append(baseSQL);
                 scriptLine.Append(midSQL);
@@ -330,6 +330,8 @@ namespace Read_Wolseley_Quote
             // 2.   Get the data rows
             // 3.   Add them to DB
 
+            int line = 7;
+
             try
             {
                 List<string> sqlScriptLines = new List<string>();       // holds the sql script to update and insert into database
@@ -341,28 +343,45 @@ namespace Read_Wolseley_Quote
 
                 string sqs = "'";
 
-                int line = 7;
-                while (listData[line-1].ToLower() != "#sinkertube")  // Process ** Floating Structures **
+          
+                while (listData[line-1].ToLower() != "#sinkertube")         // Process ** Floating Structures **
                 {
                     scriptLine.Append(baseSQL);
                     scriptLine.Append(midSQL);
-                    scriptLine.Append("'" + QuoteID + "',");        // 'QuoteID',
+                    scriptLine.Append("'" + QuoteID + "',");                // 'QuoteID',
 
-                    string[] s = listData[line].Split('|');     // Length values split
-                    scriptLine.Append(sqs + s[0] + "',");       // FloatingItemPartNo
-                    scriptLine.Append(sqs + s[1] + "',");       // FloatingEquipment
-                    scriptLine.Append(sqs + s[2] + "',");       // FloatingUnit
-                    scriptLine.Append(sqs + s[3] + "',");       // FloatingQuantity
+                    string[] s = listData[line].Split('|');                 // Length values split
+                    scriptLine.Append(sqs + s[0] + "',");                   // FloatingItemPartNo
+                    scriptLine.Append(sqs + s[1] + "',");                   // FloatingEquipment
+                    scriptLine.Append(sqs + s[2] + "',");                   // FloatingUnit
+                    scriptLine.Append(sqs + s[3] + "',");                   // FloatingQuantity
 
-                    scriptLine.Append(sqs + s[4] + "',");       // FloatingPricePerM
+                    scriptLine.Append(sqs + s[4] + "',");                   // FloatingPricePerM
 
-                    if (s[5].Length > 0)                        // FloatingDiscount %
-                       ProcessDiscountPercentage(scriptLine, sqs, s);
-                   
-                    scriptLine.Append(sqs + s[6] + "',");       // FloatingPrice PerTon
-                    scriptLine.Append(sqs + s[7] + "',");       // FloatingDelivery 
-                    scriptLine.Append(sqs + s[8] + "',");        // FloatingCost12
-                    scriptLine.Append(sqs + s[9] + "'");        // FloatingCost135
+                    if (s[5].Length > 0)                                    // FloatingDiscount %
+                    {
+                        if (s[5].EndsWith("%"))
+                        {
+                            s[5] = s[5].Substring(0, s[5].Length - 1);
+                        }
+                        //ProcessDiscountPercentage(scriptLine, sqs, s);
+                    }
+
+                    scriptLine.Append(sqs + s[5] + "',");
+
+                    if (s[6].StartsWith("£"))                               // FloatingPrice PerTon  (Remove any £ signs)
+                    {
+                        s[6] = s[6].Substring(1, s[6].Length-1);
+                        scriptLine.Append(sqs + s[6] + "',");
+                    }
+                    else
+                    {
+                        scriptLine.Append(sqs + s[6] + "',");               
+                    }
+                    
+                    scriptLine.Append(sqs + s[7] + "',");                   // FloatingDelivery 
+                    scriptLine.Append(sqs + s[8] + "',");                   // FloatingCost12
+                    scriptLine.Append(sqs + s[9] + "'");                    // FloatingCost135
                     line++;
 
                     scriptLine.Append(endSQL);
@@ -385,7 +404,7 @@ namespace Read_Wolseley_Quote
                     {
                         scriptLine.Clear();
                         lstOutput.Items.Add("");
-                        lstOutput.Items.Add("ERROR: " + ex.Message);
+                        lstOutput.Items.Add("Database ERROR: " + ex.Message);
                         lstOutput.Items.Add("");
                     }
                 }
@@ -404,6 +423,7 @@ namespace Read_Wolseley_Quote
             {
                 s[5] = s[5].Substring(0, s[5].Length - 1);
             }
+
             if (s[5] == "0%")
             {
                 scriptLine.Append(sqs + "0',");

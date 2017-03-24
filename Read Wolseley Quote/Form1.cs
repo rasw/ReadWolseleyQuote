@@ -212,7 +212,7 @@ namespace Read_Wolseley_Quote
                string id = ProcessBaseDataToDB(sheetData);
                ProcessFloatingStructuresDataToDB(sheetData, id);
                ProcessSinkerTubeDataToDB(sheetData, id);
-              // ProcessWalkwaysDataToDB(sheetData, id);
+               ProcessWalkwaysDataToDB(sheetData, id);
             }
         }
 
@@ -555,7 +555,135 @@ namespace Read_Wolseley_Quote
             }
         }
 
-       
+
+        // process Walkways
+         private void ProcessWalkwaysDataToDB(List<string> listData, string QuoteID)
+        {
+            /*  >> listData Contains The full contents
+                [0] Polarcirkel 400 cage
+                [1] Pen Quantity||1
+                [2] Pipe spec|SDR|17
+                [3] Circumference||90|m
+                [4] Sinkertube||1|pc
+                
+            [5] Item no/Part No|Equipment|Unit|Quantity|Price per M|discount  %|Price per ton|Del Y/N|12|13.5
+                [6] #Floating Structures
+                [7] |Inner floating pipe SDR17|m|186||0|0||15.5|13.7777777777778
+                [8] |Handrail pipe 140mm SD11|m|90||0|0||7.5|
+                
+            [9] #Sinkertube
+                [10] |Pipe 250 SDR11|m|96||0|0||8|7.11111111111111
+                
+            [11] #Decking pipe
+                [12] |Pipe 50x 100m coils SDR11|pc|200||0|0|||
+             */
+
+            // 1.   Get quote ID
+            // 2.   Get the data rows
+            // 3.   Add them to DB
+
+            int line = 0;
+
+            // get the start line for sinkertube data
+            for (int i = 0; i < listData.Count; i++)
+            {
+                if (listData[i].Substring(0, 5).ToLower() == "#walk")  // #Walkways
+                {
+                    line = i;
+                }
+            }
+
+            line++;     // point to next line
+
+            try
+            {
+                List<string> sqlScriptLines = new List<string>();       // holds the sql script to update and insert into database
+                StringBuilder scriptLine = new StringBuilder();         // builder for the query
+
+                string baseSQL = "INSERT INTO [dbo].[Walkways] ([QuoteID],[WalkwaysItemPartNo],[WalkwaysEquipment],[WalkwaysUnit],[WalkwaysQuantity],[WalkwaysPricePerM],[WalkwaysDiscountPercentage],[WalkwaysPrice PerTon],[WalkwaysDelivery],[WalkwaysCost12],[WalkwaysCost135]";
+                string midSQL = ") VALUES (";
+                string endSQL = ")";
+
+                string sqs = "'";
+
+                while (listData[line].Substring(0, 5).ToLower() != "#walk")       // Process ** Walkways
+                {
+                    scriptLine.Append(baseSQL);
+                    scriptLine.Append(midSQL);
+                    scriptLine.Append("'" + QuoteID + "',");                // 'QuoteID',
+
+                    string[] s = listData[line].Split('|');                 // Length values split
+
+                    if (s.Length == 1)
+                    {
+                        break;
+                    }
+
+                    scriptLine.Append(sqs + s[0] + "',");                   // WalkwaysItemPartNo
+                    scriptLine.Append(sqs + s[1] + "',");                   // WalkwaysEquipment
+                    scriptLine.Append(sqs + s[2] + "',");                   // WalkwaysUnit
+                    scriptLine.Append(sqs + s[3] + "',");                   // WalkwaysQuantity
+
+                    scriptLine.Append(sqs + s[4] + "',");                   // WalkwaysPricePerM
+
+                    if (s[5].Length > 0)                                    // WalkwaysDiscountPercentage
+                    {
+                        if (s[5].EndsWith("%"))
+                        {
+                            s[5] = s[5].Substring(0, s[5].Length - 1);
+                        }
+                    }
+
+                    scriptLine.Append(sqs + s[5] + "',");                   // WalkwaysDiscountPercentage
+
+                    if (s[6].StartsWith("£"))                               // WalkwaysPrice PerTon (Remove any £ signs)
+                    {
+                        s[6] = s[6].Substring(1, s[6].Length - 1);
+                        scriptLine.Append(sqs + s[6] + "',");
+                    }
+                    else
+                    {
+                        scriptLine.Append(sqs + s[6] + "',");
+                    }
+
+                    scriptLine.Append(sqs + s[7] + "',");                   // WalkwaysDelivery 
+                    scriptLine.Append(sqs + s[8] + "',");                   // WalkwaysCost12
+                    scriptLine.Append(sqs + s[9] + "'");                    // WalkwaysCost135
+                    line++;
+
+                    scriptLine.Append(endSQL);
+
+                    try
+                    {
+                        using (SqlConnection cnn = new SqlConnection(ConnectionString))
+                        {
+                            cnn.Open();
+                            using (SqlCommand cmd = new SqlCommand(scriptLine.ToString(), cnn))
+                            {
+                                cmd.ExecuteNonQuery();
+                                cmd.Dispose();
+                                cnn.Close();
+                                scriptLine.Clear();
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        scriptLine.Clear();
+                        lstOutput.Items.Add("");
+                        lstOutput.Items.Add("Database ERROR: " + ex.Message);
+                        lstOutput.Items.Add("");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                //lstOutput.Items.Add("");
+                //lstOutput.Items.Add("ERROR: " + ex.Message);
+                //lstOutput.Items.Add("");
+            }
+        }
+
         private string GetScalarData(string query)  // retrieve a single column result
         {
             using (SqlConnection cnn = new SqlConnection(ConnectionString))

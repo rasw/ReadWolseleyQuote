@@ -24,10 +24,13 @@ namespace Read_Wolseley_Quote
 
         AppSettings appSet = new AppSettings(Path.Combine(Directory.GetCurrentDirectory(), "ReadQuotesShowHide.xml"));
         string outputLine = "- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -";
+        Timer trigger = new Timer();
+
+        public string ConnectionString { get => connectionString; set => connectionString = value; }
 
         private void Form1_Activated(object sender, EventArgs e)
         {
-            ReadQuoteSpreadsheet();
+            //ReadQuoteSpreadsheet();   // seems to fire lots of times
             btnClose.Enabled = true;
 
             //AppSettings appSet = new AppSettings(Path.Combine(Directory.GetCurrentDirectory(), "ReadQuotesShowHide.xml"));
@@ -37,15 +40,15 @@ namespace Read_Wolseley_Quote
 
         private void Form1_Load(object sender, EventArgs e)
         {
-            //AppSettings appSet = new AppSettings(Path.Combine(Directory.GetCurrentDirectory(), "ReadQuotesShowHide.xml"));
-            bool showGUI = false;
+            trigger.Interval = 500;
+            trigger.Tick += new EventHandler(TriggerTick);
+            trigger.Start();
+        }
 
-            showGUI = Convert.ToBoolean(appSet.getValue("Wolseley"));
-
-            if (!showGUI)
-                Opacity = 0;
-
-            chkShowGUI.Checked = Convert.ToBoolean(appSet.getValue("Wolseley"));
+        void TriggerTick(object sender, EventArgs e)
+        {
+            trigger.Stop();
+            ReadQuoteSpreadsheet();
         }
 
         public void ReadQuoteSpreadsheet()
@@ -208,6 +211,8 @@ namespace Read_Wolseley_Quote
 
                string id = ProcessBaseDataToDB(sheetData);
                ProcessFloatingStructuresDataToDB(sheetData, id);
+               ProcessSinkerTubeDataToDB(sheetData, id);
+              // ProcessWalkwaysDataToDB(sheetData, id);
             }
         }
 
@@ -274,7 +279,7 @@ namespace Read_Wolseley_Quote
                 
                 try
                 {
-                    using (SqlConnection cnn = new SqlConnection(connectionString))
+                    using (SqlConnection cnn = new SqlConnection(ConnectionString))
                     {
                         cnn.Open();
                         using (SqlCommand cmd = new SqlCommand(scriptLine.ToString(), cnn))
@@ -330,7 +335,7 @@ namespace Read_Wolseley_Quote
             // 2.   Get the data rows
             // 3.   Add them to DB
 
-            int line = 7;
+            int line = 7;  // 7;
 
             try
             {
@@ -343,14 +348,19 @@ namespace Read_Wolseley_Quote
 
                 string sqs = "'";
 
-          
-                while (listData[line-1].ToLower() != "#sinkertube")         // Process ** Floating Structures **
-                {
+                while (listData[line - 1].ToLower() != "#sinkertube")       // Process ** Floating Structures **
+                { 
                     scriptLine.Append(baseSQL);
                     scriptLine.Append(midSQL);
                     scriptLine.Append("'" + QuoteID + "',");                // 'QuoteID',
 
                     string[] s = listData[line].Split('|');                 // Length values split
+
+                    if(s.Length == 1)
+                    {
+                        break;
+                    }
+
                     scriptLine.Append(sqs + s[0] + "',");                   // FloatingItemPartNo
                     scriptLine.Append(sqs + s[1] + "',");                   // FloatingEquipment
                     scriptLine.Append(sqs + s[2] + "',");                   // FloatingUnit
@@ -364,10 +374,9 @@ namespace Read_Wolseley_Quote
                         {
                             s[5] = s[5].Substring(0, s[5].Length - 1);
                         }
-                        //ProcessDiscountPercentage(scriptLine, sqs, s);
                     }
 
-                    scriptLine.Append(sqs + s[5] + "',");
+                    scriptLine.Append(sqs + s[5] + "',");                   // FloatingDiscount %
 
                     if (s[6].StartsWith("£"))                               // FloatingPrice PerTon  (Remove any £ signs)
                     {
@@ -388,7 +397,7 @@ namespace Read_Wolseley_Quote
                     
                     try
                     {
-                        using (SqlConnection cnn = new SqlConnection(connectionString))
+                        using (SqlConnection cnn = new SqlConnection(ConnectionString))
                         {
                             cnn.Open();
                             using (SqlCommand cmd = new SqlCommand(scriptLine.ToString(), cnn))
@@ -417,48 +426,139 @@ namespace Read_Wolseley_Quote
             }
         }
 
-        private static void ProcessDiscountPercentage(StringBuilder scriptLine, string sqs, string[] s)
+
+        // process sinkertubes
+        private void ProcessSinkerTubeDataToDB(List<string> listData, string QuoteID)
         {
-            if (s[5].EndsWith("%"))
+            /*  >> listData Contains The full contents
+                [0] Polarcirkel 400 cage
+                [1] Pen Quantity||1
+                [2] Pipe spec|SDR|17
+                [3] Circumference||90|m
+                [4] Sinkertube||1|pc
+                
+            [5] Item no/Part No|Equipment|Unit|Quantity|Price per M|discount  %|Price per ton|Del Y/N|12|13.5
+                [6] #Floating Structures
+                [7] |Inner floating pipe SDR17|m|186||0|0||15.5|13.7777777777778
+                [8] |Handrail pipe 140mm SD11|m|90||0|0||7.5|
+                
+            [9] #Sinkertube
+                [10] |Pipe 250 SDR11|m|96||0|0||8|7.11111111111111
+                
+            [11] #Decking pipe
+                [12] |Pipe 50x 100m coils SDR11|pc|200||0|0|||
+             */
+
+            // 1.   Get quote ID
+            // 2.   Get the data rows
+            // 3.   Add them to DB
+
+            int line = 0;
+
+            // get the start line for sinkertube data
+            for (int i = 0; i < listData.Count; i++)
             {
-                s[5] = s[5].Substring(0, s[5].Length - 1);
+                if(listData[i].Substring(0,5).ToLower() == "#sink")  // #SinkerTube
+                {
+                    line = i;
+                }
             }
 
-            if (s[5] == "0%")
+            line++;     // point to next line
+
+            try
             {
-                scriptLine.Append(sqs + "0',");
+                List<string> sqlScriptLines = new List<string>();       // holds the sql script to update and insert into database
+                StringBuilder scriptLine = new StringBuilder();         // builder for the query
+
+                string baseSQL = "INSERT INTO [dbo].[Sinkertube] ([QuoteID],[SinkertubeItemPartNo],[SinkertubeEquipment],[SinkertubeUnit],[SinkertubeQuantity],[SinkertubePricePerM],[SinkertubeDiscountPercentage],[SinkertubePrice PerTon],[SinkertubeDelivery],[SinkertubeCost12],[SinkertubeCost135] ";
+                string midSQL = ") VALUES (";
+                string endSQL = ")";
+
+                string sqs = "'";
+
+                while (listData[line].Substring(0, 5).ToLower() != "#walk")       // Process ** SinkerTubes
+                {
+                    scriptLine.Append(baseSQL);
+                    scriptLine.Append(midSQL);
+                    scriptLine.Append("'" + QuoteID + "',");                // 'QuoteID',
+
+                    string[] s = listData[line].Split('|');                 // Length values split
+
+                    if (s.Length == 1)
+                    {
+                        break;
+                    }
+
+                    scriptLine.Append(sqs + s[0] + "',");                   // SinkertubeItemPartNo
+                    scriptLine.Append(sqs + s[1] + "',");                   // SinkertubeEquipment
+                    scriptLine.Append(sqs + s[2] + "',");                   // SinkertubeUnit
+                    scriptLine.Append(sqs + s[3] + "',");                   // SinkertubeQuantity
+
+                    scriptLine.Append(sqs + s[4] + "',");                   // SinkertubePricePerM
+
+                    if (s[5].Length > 0)                                    // SinkerDiscount %
+                    {
+                        if (s[5].EndsWith("%"))
+                        {
+                            s[5] = s[5].Substring(0, s[5].Length - 1);
+                        }
+                    }
+
+                    scriptLine.Append(sqs + s[5] + "',");                   // SinkerDiscount %
+
+                    if (s[6].StartsWith("£"))                               // SinkertubePrice PerTon  (Remove any £ signs)
+                    {
+                        s[6] = s[6].Substring(1, s[6].Length - 1);
+                        scriptLine.Append(sqs + s[6] + "',");
+                    }
+                    else
+                    {
+                        scriptLine.Append(sqs + s[6] + "',");
+                    }
+
+                    scriptLine.Append(sqs + s[7] + "',");                   // SinkertubeDelivery 
+                    scriptLine.Append(sqs + s[8] + "',");                   // SinkertubeCost12
+                    scriptLine.Append(sqs + s[9] + "'");                    // SinkertubeCost135
+                    line++;
+
+                    scriptLine.Append(endSQL);
+
+                    try
+                    {
+                        using (SqlConnection cnn = new SqlConnection(ConnectionString))
+                        {
+                            cnn.Open();
+                            using (SqlCommand cmd = new SqlCommand(scriptLine.ToString(), cnn))
+                            {
+                                cmd.ExecuteNonQuery();
+                                cmd.Dispose();
+                                cnn.Close();
+                                scriptLine.Clear();
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        scriptLine.Clear();
+                        lstOutput.Items.Add("");
+                        lstOutput.Items.Add("Database ERROR: " + ex.Message);
+                        lstOutput.Items.Add("");
+                    }
+                }
             }
-            else
+            catch (Exception ex)
             {
-                scriptLine.Append(sqs + s[5] + "',");       // FloatingDiscount %
+                lstOutput.Items.Add("");
+                lstOutput.Items.Add("ERROR: " + ex.Message);
+                lstOutput.Items.Add("");
             }
         }
 
-        //while (listData[line].ToLower() != "#walkways")  // Process ** Sinkertube **
-        //{
-        //    string[] s = listData[line].Split('|');     // Length values split
-        //    scriptLine.Append(sqs + s[0] + "',");       // FloatingItemPartNo
-        //    scriptLine.Append(sqs + s[1] + "',");       // FloatingEquipment
-        //    scriptLine.Append(sqs + s[2] + "',");       // FloatingUnit
-        //    scriptLine.Append(sqs + s[3] + "',");       // FloatingQuantity
-        //    scriptLine.Append(sqs + s[4] + "',");       // FloatingPricePerM
-        //    scriptLine.Append(sqs + s[5] + "',");       // FloatingPrice PerTon
-        //    scriptLine.Append(sqs + s[6] + "',");       // FloatingDelivery
-        //    scriptLine.Append(sqs + s[7] + "',");       // FloatingCost12
-        //    scriptLine.Append(sqs + s[8] + "',");       // FloatingCost135
-        //    line++;
-        //}
-
-
-        //string[] e = listData[5].Split('|');        // Length values split
-        //scriptLine.Append(sqs + e[8]+ "',");        // FloatingCost12
-        //scriptLine.Append(sqs + e[9] + "',")        // FloatingCost135
-
-
-
+       
         private string GetScalarData(string query)  // retrieve a single column result
         {
-            using (SqlConnection cnn = new SqlConnection(connectionString))
+            using (SqlConnection cnn = new SqlConnection(ConnectionString))
             {
                 using (SqlCommand cmd = new SqlCommand())
                 {
@@ -488,11 +588,7 @@ namespace Read_Wolseley_Quote
                 appSet.setValue("Wolseley", false.ToString());
         }
 
-        private void Form1_Paint(object sender, PaintEventArgs e)
-        {
-          
-        }
-
+       
         private void btnSave_Click(object sender, EventArgs e)
         {
          
